@@ -3,10 +3,8 @@ package edu.nccu.moviefinder.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.List;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled("Member B: remove this line once SubLinkCrawler.extractLinks is implemented")
 class SubLinkCrawlerTest {
     private static final String BASE = "https://films.example.com/";
 
