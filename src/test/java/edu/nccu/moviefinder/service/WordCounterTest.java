@@ -3,7 +3,6 @@ package edu.nccu.moviefinder.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.IOException;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 class WordCounterTest {
@@ -30,14 +29,12 @@ class WordCounterTest {
     }
 
     @Test
-    @Disabled("Member B: enable after adding whole-word matching (see the WordCounter TODO)")
     void doesNotCountEnglishKeywordsInsideLongerWords() throws IOException {
         assertEquals(1, count("category education cat", "cat"));
         assertEquals(1, count("email said AI main", "AI"));
     }
 
     @Test
-    @Disabled("Member B: enable after adding whole-word matching (see the WordCounter TODO)")
     void wholeWordMatchingAcceptsPunctuationAndKeepsChineseWorking() throws IOException {
         assertEquals(2, count("A cat, a (cat).", "cat"));
         assertEquals(2, count("這部電影是好電影", "電影"));
