@@ -9,15 +9,16 @@ import edu.nccu.moviefinder.model.KeywordList;
 import edu.nccu.moviefinder.model.WebPage;
 import java.io.IOException;
 import java.util.List;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled("Member D: remove this line once KeywordExpander is implemented")
 class KeywordExpanderTest {
     private final KeywordExpander expander = new KeywordExpander();
 
     private static WebPage page(String content) {
-        return new WebPage("https://example.com", "t", new WordCounter("https://example.com", content));
+        return new WebPage(
+                "https://example.com",
+                "t",
+                new WordCounter("https://example.com", content));
     }
 
     @Test
@@ -38,20 +39,23 @@ class KeywordExpanderTest {
     @Test
     void excludesStopwordsAndTheOriginalQuery() {
         List<Keyword> derived = expander.deriveKeywords(
-                List.of(page("the movie about cooking and the chef"), page("the film about cooking")), "cooking");
+                List.of(page("the movie about cooking and the chef"), page("the film about cooking")),
+                "cooking");
 
-        for (Keyword k : derived) {
-            assertFalse(List.of("the", "movie", "film", "cooking").contains(k.getName().toLowerCase()), k.toString());
+        for (Keyword keyword : derived) {
+            assertFalse(List.of("the", "movie", "film", "cooking", "about")
+                    .contains(keyword.getName().toLowerCase()));
         }
     }
 
     @Test
     void derivedWeightsStayBelowTheUserWeight() {
-        List<Keyword> derived = expander.deriveKeywords(List.of(page("chef chef chef recipe recipe")), "cooking");
+        List<Keyword> derived = expander.deriveKeywords(
+                List.of(page("chef chef chef recipe recipe")), "cooking");
 
         assertFalse(derived.isEmpty());
-        for (Keyword k : derived) {
-            assertTrue(k.getWeight() > 0 && k.getWeight() < KeywordList.USER_WEIGHT, k.toString());
+        for (Keyword keyword : derived) {
+            assertTrue(keyword.getWeight() > 0 && keyword.getWeight() < KeywordList.USER_WEIGHT);
         }
     }
 
@@ -64,6 +68,7 @@ class KeywordExpanderTest {
             }
         };
 
-        assertTrue(expander.deriveKeywords(List.of(new WebPage("https://broken.example", "t", broken)), "cat").isEmpty());
+        assertTrue(expander.deriveKeywords(
+                List.of(new WebPage("https://broken.example", "t", broken)), "cat").isEmpty());
     }
 }
