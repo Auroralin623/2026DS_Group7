@@ -1,55 +1,54 @@
 package edu.nccu.moviefinder.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import edu.nccu.moviefinder.service.WordCounter;
 import java.io.IOException;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled("Member A: remove this line once WebPage.setScore is implemented")
 class WebPageTest {
 
-    private static KeywordList keywords() {
-        KeywordList kws = new KeywordList();
-        kws.add(new Keyword("movie", 3));
-        kws.add(new Keyword("director", 2));
-        kws.add(new Keyword("ticket", -1));
-        return kws;
-    }
-
-    private static WebPage page(String content) {
-        return new WebPage("https://example.com", "t", new WordCounter("https://example.com", content));
-    }
-
     @Test
-    void scoreIsTheWeightedSumOfCounts() throws IOException {
-        WebPage page = page("movie movie director ticket");
+    void scoresKeywordsAndRecordsTheirCounts() throws IOException {
+        WebPage page = new WebPage("https://example.com", "Example",
+                new WordCounter("https://example.com", "movie movie cat"));
+        KeywordList keywords = new KeywordList();
+        keywords.add(new Keyword("movie", 2));
+        keywords.add(new Keyword("cat", -1));
 
-        page.setScore(keywords());
+        page.setScore(keywords);
 
-        assertEquals(2 * 3 + 1 * 2 - 1, page.getScore());
+        assertEquals(3.0, page.getScore());
         assertEquals(2, page.getCounts().get("movie"));
-        assertEquals(1, page.getCounts().get("ticket"));
+        assertEquals(1, page.getCounts().get("cat"));
     }
 
     @Test
-    void absentKeywordsAreRecordedAsZero() throws IOException {
-        WebPage page = page("nothing relevant");
+    void scoringAgainDoesNotAccumulatePreviousResults() throws IOException {
+        WebPage page = new WebPage("https://example.com", "Example",
+                new WordCounter("https://example.com", "movie movie"));
+        KeywordList keywords = new KeywordList();
+        keywords.add(new Keyword("movie", 2));
 
-        page.setScore(keywords());
+        page.setScore(keywords);
+        page.setScore(keywords);
 
-        assertEquals(0, page.getScore());
-        assertEquals(0, page.getCounts().get("movie"));
+        assertEquals(4.0, page.getScore());
+        assertEquals(2, page.getCounts().get("movie"));
     }
 
     @Test
-    void scoringTwiceDoesNotAccumulate() throws IOException {
-        WebPage page = page("movie");
+    void nullKeywordsResetScoreAndCounts() throws IOException {
+        WebPage page = new WebPage("https://example.com", "Example",
+                new WordCounter("https://example.com", "movie"));
+        KeywordList keywords = new KeywordList();
+        keywords.add(new Keyword("movie", 2));
+        page.setScore(keywords);
 
-        page.setScore(keywords());
-        page.setScore(keywords());
+        page.setScore(null);
 
-        assertEquals(3, page.getScore());
+        assertEquals(0.0, page.getScore());
+        assertTrue(page.getCounts().isEmpty());
     }
 }

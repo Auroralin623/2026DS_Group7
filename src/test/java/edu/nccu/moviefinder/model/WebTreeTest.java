@@ -8,10 +8,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled("Member A: remove this line once WebNode and WebTree are implemented")
 class WebTreeTest {
 
     private static KeywordList keywords() {
@@ -98,7 +96,11 @@ class WebTreeTest {
 
         String[] lines = captured.toString(StandardCharsets.UTF_8).split("\\R");
         assertEquals(2, lines.length);
-        assertTrue(lines[0].contains("https://a.example/") && lines[0].contains("movie"));
-        assertTrue(lines[1].startsWith("  ") && !lines[0].startsWith(" "));
+        assertTrue(lines[0].contains("https://a.example/"));
+        assertTrue(lines[0].contains("score=3.5"));
+        assertTrue(lines[0].contains("movie=3"));
+        assertTrue(lines[1].startsWith("  https://a.example/1"));
+        assertTrue(lines[1].contains("score=1.0"));
+        assertTrue(lines[1].contains("movie=1"));
     }
 }

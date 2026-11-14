@@ -31,13 +31,22 @@ public class WebPage {
         return page;
     }
 
-    /**
-     * WebPage.score = Σ count(k_i) × weight(k_i),並把每個關鍵字的次數記入 counts。
-     * 重複呼叫時不可累加上一次的結果。
-     */
     public void setScore(KeywordList kws) throws IOException {
-        // TODO(Member A, Stage 1)
-        throw new UnsupportedOperationException("TODO(Member A): WebPage.setScore");
+        score = 0.0;
+        counts = new HashMap<>();
+        if (kws == null) {
+            return;
+        }
+
+        HashMap<String, Integer> newCounts = new HashMap<>();
+        double newScore = 0.0;
+        for (Keyword keyword : kws.getList()) {
+            int count = counter.countKeyword(keyword.getName());
+            newCounts.put(keyword.getName(), count);
+            newScore += count * keyword.getWeight();
+        }
+        counts = newCounts;
+        score = newScore;
     }
 
     public String getUrl() {

@@ -33,8 +33,11 @@ public class WebNode {
      * 呼叫前,自己的 WebPage 分數和所有子節點的 nodeScore 都必須已算好。
      */
     public void setNodeScore() {
-        // TODO(Member A, Stage 2)
-        throw new UnsupportedOperationException("TODO(Member A): WebNode.setNodeScore");
+        double childScores = 0.0;
+        for (WebNode child : children) {
+            childScores += child.nodeScore;
+        }
+        nodeScore = webPage.getScore() + CHILD_DISCOUNT * childScores;
     }
 
     public boolean isRoot() {
@@ -43,8 +46,13 @@ public class WebNode {
 
     /** 根節點深度為 0,印樹時用來決定縮排。 */
     public int getDepth() {
-        // TODO(Member A, Stage 2)
-        throw new UnsupportedOperationException("TODO(Member A): WebNode.getDepth");
+        int depth = 0;
+        WebNode ancestor = parent;
+        while (ancestor != null) {
+            depth++;
+            ancestor = ancestor.parent;
+        }
+        return depth;
     }
 
     public WebPage getWebPage() {
