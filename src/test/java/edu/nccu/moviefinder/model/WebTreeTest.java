@@ -67,7 +67,7 @@ class WebTreeTest {
     void aFailedPageScoresZeroWithoutStoppingTheTree() {
         WordCounter broken = new WordCounter("https://a.example/broken") {
             @Override
-            protected String fetchContent() throws IOException {
+            public String fetchContent() throws IOException {
                 throw new IOException("HTTP 404");
             }
         };

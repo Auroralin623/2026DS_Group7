@@ -59,7 +59,7 @@ class KeywordExpanderTest {
     void skipsPagesThatCannotBeFetched() {
         WordCounter broken = new WordCounter("https://broken.example") {
             @Override
-            protected String fetchContent() throws IOException {
+            public String fetchContent() throws IOException {
                 throw new IOException("HTTP 500");
             }
         };
