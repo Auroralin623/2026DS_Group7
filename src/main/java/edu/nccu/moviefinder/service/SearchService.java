@@ -1,5 +1,5 @@
 package edu.nccu.moviefinder.service;
-
+import edu.nccu.moviefinder.model.WebNode;
 import edu.nccu.moviefinder.model.KeywordList;
 import edu.nccu.moviefinder.model.SearchResult;
 import edu.nccu.moviefinder.model.WebPage;
@@ -46,16 +46,89 @@ public class SearchService {
 
     /** 跑一輪:對每個查詢字串搜尋,以網址去重後建樹,呼叫 prefetcher.prefetch,再計分、排序。 */
     protected List<WebTree> runRound(List<String> queries, KeywordList kws) {
-        // TODO(Member C, Stage 3)
-        throw new UnsupportedOperationException("TODO(Member C): SearchService.runRound");
+        // 1. 收集所有查詢的結果，並依 URL 去重
+    LinkedHashMap<String, String> results = new LinkedHashMap<>();
+
+    for (String query : queries) {
+        try {
+            LinkedHashMap<String, String> found = googleQuery.query(query);
+
+            for (var entry : found.entrySet()) {
+                results.putIfAbsent(entry.getKey(), entry.getValue());
+            }
+        } catch (IOException | IllegalStateException e) {
+            throw new SearchUnavailableException(
+                "Tavily search is unavailable", e);
+        }
+    }
+
+    // 2. 將每個搜尋結果建立成網站樹
+    List<WebTree> trees = new ArrayList<>();
+
+    for (var entry : results.entrySet()) {
+    try {
+        WebTree tree = buildTree(entry.getKey(), entry.getValue());
+        trees.add(tree);
+    } catch (RuntimeException e) {
+        System.err.println(
+            "Failed to build tree for " + entry.getKey()
+            + ": " + e.getMessage()
+        );
+    }
+}
+
+    // 3. 預先抓取所有網頁內容
+    prefetcher.prefetch(trees);
+
+    // 4. 計算每棵網站樹的分數
+    List<WebTree> scoredTrees = new ArrayList<>();
+
+   for (WebTree tree : trees) {
+    try {
+        tree.setPostOrderScore(kws);
+        scoredTrees.add(tree);
+    } catch (RuntimeException e) {
+        System.err.println(
+            "Failed to score tree: "
+            + tree.getRoot().getWebPage().getUrl()
+            + ": " + e.getMessage()
+        );
+    }
+}
+
+    // 5. 使用 QuickSort 排序
+    ranker.sort(scoredTrees);
+
+    return scoredTrees;
     }
 
     /** 把一個網站建成 WebTree(根節點 + 最多 maxLinks 個子節點)。 */
     protected WebTree buildTree(String url, String title) {
-        // TODO(Member C, Stage 3)
-        throw new UnsupportedOperationException("TODO(Member C): SearchService.buildTree");
+      // 1. 建立首頁，並包成根節點
+    WebPage rootPage = newPage(url, title);
+    WebNode root = new WebNode(rootPage);
+
+    // 2. 建立網站樹
+    WebTree tree = new WebTree(root);
+
+    try {
+        // 3. 呼叫 B 的爬蟲，取得子網頁網址
+        List<String> links = crawler.getSubLinks(url);
+
+        // 4. 把子網頁加入根節點
+        for (String link : links) {
+            WebPage childPage = newPage(link, link);
+            WebNode childNode = new WebNode(childPage);
+            root.addChild(childNode);
+        }
+
+    } catch (IOException e) {
+        // 找不到子網頁時，保留只有根節點的樹
     }
 
+    // 5. 回傳整棵樹
+    return tree;
+    }
     /**
      * 和查詢相關的關鍵字,顯示在結果頁的 Related Keywords。目前回傳空清單,頁面會隱藏這個區塊。
      * TODO(Member C、D): 接上 KeywordExpander.deriveKeywords 的結果。
