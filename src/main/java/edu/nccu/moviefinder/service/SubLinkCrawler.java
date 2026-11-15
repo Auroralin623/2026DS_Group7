@@ -1,7 +1,6 @@
 package edu.nccu.moviefinder.service;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -10,115 +9,124 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-/** 找出一個網頁的子網頁,用來建立兩層的網站樹。 */
+/**
+ * 負責從網頁中抓取同網域子網頁，限制最多指定數量，並過濾重複、# 錨點、Base Page 以及常見非網頁檔案。
+ */
 @Service
 public class SubLinkCrawler {
-    private final int maxLinks;
+
+    private int maxLinks = 5;
     private final int maxDepth = 1;
 
-    public SubLinkCrawler(@Value("${crawler.max-links:5}") int maxLinks) {
-        this.maxLinks = maxLinks;
-    }
-
-    /** 抓取 url 的 HTML 後,交給 extractLinks 取出子網頁。 */
-    public List<String> getSubLinks(String url) throws IOException {
-        Document doc = Jsoup.connect(url)
-                .timeout(5000)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                .get();
-        return extractLinks(doc.html(), url);
+    /**
+     * 預設建構子，預設最大連結數為 5。
+     */
+    public SubLinkCrawler() {
+        this.maxLinks = 5;
     }
 
     /**
-     * - 從 HTML 取出最多 maxLinks 個子網頁的絕對網址,順序依頁面出現順序。
-     * - 規則:相對網址要轉成絕對網址、去掉 #fragment、只留同網域的 http(s) 連結、
-     * - 用 HashSet 去除重複,且不可包含 baseUrl 自己。
+     * 支援自定義最大連結數的建構子（供單元測試使用，例如 new SubLinkCrawler(5)）。
+     */
+    public SubLinkCrawler(int maxLinks) {
+        this.maxLinks = maxLinks;
+    }
+
+    /**
+     * 用 Jsoup 抓取 HTML。
+     * 宣告 throws IOException，以相容測試檔覆寫時的例外規範。
+     */
+    public List<String> getSubLinks(String url) throws IOException {
+        Document doc = Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .timeout(5000)
+                .get();
+        return extractLinks(doc, url);
+    }
+
+    /**
+     * 讓測試可以直接傳入 HTML 字串與 Base URL 進行解析。
      */
     public List<String> extractLinks(String html, String baseUrl) {
-        List<String> result = new ArrayList<>();
-        if (html == null || html.isEmpty() || baseUrl == null) {
-            return result;
+        if (html == null || html.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Document doc = Jsoup.parse(html, baseUrl);
+        return extractLinks(doc, baseUrl);
+    }
+
+    /**
+     * 從 Document 中擷取最多指定數量的同網域子網頁，去除重複、# 錨點、Base Page 以及非網頁檔案。
+     */
+    public List<String> extractLinks(Document doc, String baseUrl) {
+        List<String> validLinks = new ArrayList<>();
+        if (doc == null || baseUrl == null) {
+            return validLinks;
         }
 
-        Document doc = Jsoup.parse(html, baseUrl);
+        Set<String> seenUrls = new HashSet<>();
         Elements links = doc.select("a[href]");
 
-        Set<String> seen = new HashSet<>();
-        URI baseUri;
+        // 解析基本網域 (例如 https://example.com)
+        java.net.URI baseUri;
         try {
-            baseUri = URI.create(baseUrl);
+            baseUri = new java.net.URI(baseUrl);
         } catch (Exception e) {
-            return result;
+            return validLinks;
         }
-
         String baseHost = baseUri.getHost();
-        String normalizedBase = cleanUrl(baseUrl);
+
+        // 統一正規化 baseUrl（去除結尾斜線，方便後續比對）
+        String normalizedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
 
         for (Element link : links) {
-            if (result.size() >= maxLinks) {
+            if (validLinks.size() >= maxLinks) {
                 break;
             }
 
-            // 取得絕對網址
-            String absUrl = link.attr("abs:href");
-            if (absUrl == null || absUrl.isEmpty()) {
+            String absUrl = link.absUrl("href");
+            if (absUrl.isEmpty()) {
                 continue;
             }
 
-            // 去掉 #fragment 錨點
-            int hashIndex = absUrl.indexOf('#');
-            if (hashIndex != -1) {
-                absUrl = absUrl.substring(0, hashIndex);
+            // 去除 # 錨點
+            int hashIdx = absUrl.indexOf('#');
+            if (hashIdx != -1) {
+                absUrl = absUrl.substring(0, hashIdx);
             }
 
-            String cleanedUrl = cleanUrl(absUrl);
-
-            // 不可包含 baseUrl 自己
-            if (cleanedUrl.equals(normalizedBase)) {
+            // 檢查是否為空或已經看過
+            if (absUrl.isEmpty() || seenUrls.contains(absUrl)) {
                 continue;
             }
 
-            // 檢查是否為 http(s) 且為同網域
+            // 檢查是否為起始網頁本身 (Base Page)，避免把首頁自己抓進子連結
+            String normalizedAbs = absUrl.endsWith("/") ? absUrl.substring(0, absUrl.length() - 1) : absUrl;
+            if (normalizedAbs.equals(normalizedBase)) {
+                continue;
+            }
+
+            // 檢查副檔名，過濾圖片、PDF 等非網頁檔案
+            String lowerUrl = absUrl.toLowerCase();
+            if (lowerUrl.matches(".*\\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|css|js)(\\?.*)?$")) {
+                continue;
+            }
+
+            // 檢查是否同網域
             try {
-                URI targetUri = URI.create(absUrl);
-                String scheme = targetUri.getScheme();
-                if (scheme == null || (!scheme.equalsIgnoreCase("http") && !scheme.equalsIgnoreCase("https"))) {
-                    continue;
-                }
-
+                java.net.URI targetUri = new java.net.URI(absUrl);
                 String targetHost = targetUri.getHost();
-                if (targetHost == null || !targetHost.equalsIgnoreCase(baseHost)) {
-                    continue;
+                if (targetHost != null && targetHost.equals(baseHost)) {
+                    seenUrls.add(absUrl);
+                    validLinks.add(absUrl);
                 }
             } catch (Exception e) {
-                continue;
-            }
-
-            // 用 HashSet 去除重複，並維持出現順序
-            if (seen.add(cleanedUrl)) {
-                result.add(absUrl);
+                // 忽略解析失敗的無效網址
             }
         }
 
-        return result;
-    }
-
-    /** 輔助方法：統一去除結尾斜線以便進行乾淨的比對 */
-    private String cleanUrl(String url) {
-        if (url.endsWith("/")) {
-            return url.substring(0, url.length() - 1);
-        }
-        return url;
-    }
-
-    public int getMaxLinks() {
-        return maxLinks;
-    }
-
-    public int getMaxDepth() {
-        return maxDepth;
+        return validLinks;
     }
 }
