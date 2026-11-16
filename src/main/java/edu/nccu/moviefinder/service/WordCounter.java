@@ -44,7 +44,10 @@ public class WordCounter {
         return this.content;
     }
 
-    public String getContent() {
+    public String getContent() throws IOException {
+        if (content == null) {
+            content = fetchContent();
+        }
         return content;
     }
 
