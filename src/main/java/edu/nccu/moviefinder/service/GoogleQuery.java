@@ -27,6 +27,22 @@ public class GoogleQuery {
     /** Tavily 允許的 max_results 上限。 */
     private static final int MAX_RESULTS_LIMIT = 20;
 
+/** Cache 最多保留 100 筆搜尋結果。 */
+private static final int CACHE_LIMIT = 100;
+
+/** 使用 LRU 機制儲存搜尋結果。 */
+private final Map<String, LinkedHashMap<String, String>> cache =
+        new LinkedHashMap<String, LinkedHashMap<String, String>>(
+                16, 0.75f, true) {
+
+            @Override
+            protected boolean removeEldestEntry(
+                    Map.Entry<String, LinkedHashMap<String, String>> eldest) {
+                return size() > CACHE_LIMIT;
+            }
+        };
+
+
     private final String apiKey;
     private final int maxResults;
     private final JsonMapper mapper = JsonMapper.builder().build();
@@ -43,7 +59,29 @@ public class GoogleQuery {
      * apiKey 為空時丟出 IllegalStateException,並在訊息中提示設定 TAVILY_API_KEY。
      * 連線失敗、金鑰錯誤、額度用盡時丟出 IOException,訊息說明原因。
      */
-    public LinkedHashMap<String, String> query(String q) throws IOException {
+
+
+/** 優先使用快取，避免重複呼叫 Tavily API。 */
+public LinkedHashMap<String, String> query(String q) throws IOException {
+
+    synchronized (cache) {
+        LinkedHashMap<String, String> cached = cache.get(q);
+
+        if (cached != null) {
+            return new LinkedHashMap<>(cached);
+        }
+    }
+
+    LinkedHashMap<String, String> results = fetchFromTavily(q);
+
+    synchronized (cache) {
+        cache.put(q, new LinkedHashMap<>(results));
+    }
+
+    return results;
+}
+
+   protected LinkedHashMap<String, String> fetchFromTavily(String q) throws IOException {
         if (apiKey == null || apiKey.isBlank()) {
             throw new IllegalStateException("Tavily API key is missing. Set the TAVILY_API_KEY environment variable.");
         }
