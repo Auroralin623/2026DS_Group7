@@ -1,4 +1,6 @@
 package edu.nccu.moviefinder.service;
+import edu.nccu.moviefinder.model.Keyword;
+import java.util.HashMap;
 import edu.nccu.moviefinder.model.WebNode;
 import edu.nccu.moviefinder.model.KeywordList;
 import edu.nccu.moviefinder.model.SearchResult;
@@ -134,6 +136,49 @@ public class SearchService {
      * TODO(Member C、D): 接上 KeywordExpander.deriveKeywords 的結果。
      * 注意不要為此重跑一次搜尋,可以在 search 時保存結果,或改成由 search 一起回傳。
      */
+
+
+/** 計算整棵網站樹中每個關鍵字的分數貢獻。 */
+protected HashMap<String, Double> calculateBreakdown(
+        WebTree tree, KeywordList kws) {
+
+    HashMap<String, Double> breakdown = new HashMap<>();
+
+    accumulateBreakdown(tree.getRoot(), kws, 1.0, breakdown);
+
+    return breakdown;
+}
+
+/** 遞迴累加每個節點的關鍵字分數。 */
+private void accumulateBreakdown(
+        WebNode node,
+        KeywordList kws,
+        double discount,
+        HashMap<String, Double> breakdown) {
+
+    WebPage page = node.getWebPage();
+
+    for (Keyword keyword : kws.getList()) {
+        String name = keyword.getName();
+
+        int count = page.getCounts().getOrDefault(name, 0);
+
+        double contribution =
+                count * keyword.getWeight() * discount;
+
+        breakdown.merge(name, contribution, Double::sum);
+    }
+
+    for (WebNode child : node.getChildren()) {
+        accumulateBreakdown(
+                child,
+                kws,
+                discount * WebNode.CHILD_DISCOUNT,
+                breakdown);
+    }
+}
+
+
     public List<String> relatedKeywords(String q) {
         return List.of();
     }
