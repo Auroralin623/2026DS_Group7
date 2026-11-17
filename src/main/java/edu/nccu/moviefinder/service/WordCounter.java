@@ -1,54 +1,54 @@
 package edu.nccu.moviefinder.service;
 
-import java.io.BufferedReader;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.URL;
-import java.net.URLConnection;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
- * 抓取一個網頁並計算關鍵字次數(由 Stage 0 / HW3 移植,Boyer-Moore 邏輯未變)。
- * 每個網頁一個實例,因此不是 Spring bean。
- *
- * TODO(Member B):
- *  1. 改用 Jsoup 抓取並只取內文,目前連 HTML 標籤和 script 都會計入。
- *  2. 英文關鍵字要比對完整單字,目前 "cat" 會命中 "category"、"AI" 會命中 "email"。
- *  3. 設定連線逾時與 User-Agent,目前沒有逾時,一個卡住的網站會拖住整次搜尋。
- *  4. last() 每次呼叫 BoyerMoore 都重建 65536 格陣列,應該每個關鍵字只建一次。
- *  5. fetchContent 用字串 + 串接是 O(n²),改用 StringBuilder 或 Jsoup。
+ * - 負責抓取網頁內容並計算關鍵字出現次數。
+ * - 英文關鍵字採用完整單字比對，中文維持原本比對方式。
+ * - 字串搜尋採用 Boyer-Moore 演算法。
  */
 public class WordCounter {
-    private final String urlStr;
-    private String content;
-    private String upperContent;
 
-    public WordCounter(String urlStr) {
-        this.urlStr = urlStr;
+    private final String url;
+    private String content;
+
+    /**
+     * - 用於正常營運：只傳入網址，後續透過 fetchContent() 抓取。
+     */
+    public WordCounter(String url) {
+        this.url = url;
     }
 
-    /** 測試用:直接給內容,不連網。 */
-    public WordCounter(String urlStr, String content) {
-        this.urlStr = urlStr;
+    /**
+     * - 用於單元測試：直接傳入網址與測試內文，免去網路連線。
+     */
+    public WordCounter(String url, String content) {
+        this.url = url;
         this.content = content;
     }
 
-    protected String fetchContent() throws IOException {
-        URL url = new URL(this.urlStr);
-        URLConnection conn = url.openConnection();
-        InputStream in = conn.getInputStream();
-        BufferedReader br = new BufferedReader(new InputStreamReader(in));
-
-        String retVal = "";
-        String line = null;
-        while ((line = br.readLine()) != null) {
-            retVal = retVal + line + "\n";
+    /**
+     * - 抓取網頁內容（僅取純文字），並設定逾時和 User-Agent。
+     * - 修正：改為回傳 String，以符合其他測試或呼叫端的型別預期。
+     */
+    public String fetchContent() throws IOException {
+        if (content != null) {
+            return content;
         }
-        return retVal;
+        Document doc = Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                .timeout(5000)
+                .get();
+        this.content = doc.text();
+        return this.content;
     }
 
-    /** 網頁內容,只抓一次。 */
     public String getContent() throws IOException {
         if (content == null) {
             content = fetchContent();
@@ -56,66 +56,100 @@ public class WordCounter {
         return content;
     }
 
-    public int BoyerMoore(String T, String P, int start) {
-        int n = T.length();
-        int m = P.length();
-
-        if (m == 0) {
-            return -1;
+    /**
+     * - 計算關鍵字出現次數。
+     * - 中文維持原本比對方式，英文比對完整單字（利用 ASCII 邊界判斷避免中文緊鄰時被誤判）。
+     * - 內部改用 Boyer-Moore 演算法進行字串搜尋。
+     */
+    public int countKeyword(String keyword) {
+        if (content == null || keyword == null || keyword.isEmpty()) {
+            return 0;
         }
 
-        int[] L = last(P);
+        // 檢查是否全為英文/數字（粗略判斷是否為英文關鍵字）
+        boolean isEnglishKeyword = keyword.chars().allMatch(c -> (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'));
 
-        int i = start + m - 1;
-        int j = m - 1;
+        if (!isEnglishKeyword) {
+            // 中文比對，改用 Boyer-Moore 演算法計算出現次數
+            List<Integer> matches = boyerMooreSearchAll(content, keyword);
+            return matches.size();
+        } else {
+            // 英文完整單字比對，改用 Boyer-Moore 演算法找出位置後再做邊界確認
+            int count = 0;
+            String lowerContent = content.toLowerCase();
+            String lowerKeyword = keyword.toLowerCase();
+            int kwLen = keyword.length();
 
-        while (i <= n - 1) {
-            if (T.charAt(i) == P.charAt(j)) {
-                if (j == 0) {
-                    return i;
+            List<Integer> matches = boyerMooreSearchAll(lowerContent, lowerKeyword);
+            for (int idx : matches) {
+                if (isWholeWord(lowerContent, idx, kwLen)) {
+                    count++;
                 }
-                i--;
+            }
+            return count;
+        }
+    }
+
+    /**
+     * Boyer-Moore 演算法實作（使用 Map 支援中文與所有 Unicode 字元，避免陣列邊界報錯）
+     */
+    private List<Integer> boyerMooreSearchAll(String text, String pattern) {
+        List<Integer> matches = new ArrayList<>();
+        int n = text.length();
+        int m = pattern.length();
+        if (m == 0 || n < m) {
+            return matches;
+        }
+
+        // 壞字元對照表
+        Map<Character, Integer> badChar = new HashMap<>();
+        for (int i = 0; i < m; i++) {
+            badChar.put(pattern.charAt(i), i);
+        }
+
+        int s = 0;
+        while (s <= (n - m)) {
+            int j = m - 1;
+
+            while (j >= 0 && pattern.charAt(j) == text.charAt(s + j)) {
                 j--;
+            }
+
+            if (j < 0) {
+                matches.add(s);
+                s += m; // 匹配成功後向右移動字串長度，確保不重複計算
             } else {
-                int l = L[T.charAt(i)];
-                i += m - Math.min(j, l + 1);
-                j = m - 1;
+                char badCharInText = text.charAt(s + j);
+                int badCharShift = badChar.getOrDefault(badCharInText, -1);
+                s += Math.max(1, j - badCharShift);
             }
         }
-
-        return -1;
+        return matches;
     }
 
-    public int[] last(String P) {
-        int[] L = new int[Character.MAX_VALUE + 1];
-
-        Arrays.fill(L, -1);
-
-        for (int i = 0; i < P.length(); i++) {
-            L[P.charAt(i)] = i;
-        }
-
-        return L;
-    }
-
-    /** 不分大小寫計算關鍵字次數。 */
-    public int countKeyword(String keyword) throws IOException {
-        if (upperContent == null) {
-            upperContent = getContent().toUpperCase();
-        }
-
-        keyword = keyword.toUpperCase();
-
-        int retVal = 0;
-        int i = 0;
-        while (i < upperContent.length()) {
-            int j = BoyerMoore(upperContent, keyword, i);
-            if (j == -1) {
-                break;
+    private boolean isWholeWord(String text, int start, int length) {
+        // 檢查前一個字元
+        if (start > 0) {
+            char prev = text.charAt(start - 1);
+            if (isAsciiLetterOrDigit(prev)) {
+                return false;
             }
-            retVal++;
-            i = j + 1;
         }
-        return retVal;
+        // 檢查後一個字元
+        int end = start + length;
+        if (end < text.length()) {
+            char next = text.charAt(end);
+            if (isAsciiLetterOrDigit(next)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * - 只把 ASCII 英文字母和數字當成單字的一部分，避免中文字被誤判為字母邊界。
+     */
+    private boolean isAsciiLetterOrDigit(char c) {
+        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
     }
 }
