@@ -1,4 +1,6 @@
 package edu.nccu.moviefinder.service;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 import edu.nccu.moviefinder.model.Keyword;
 import java.util.HashMap;
 import edu.nccu.moviefinder.model.WebNode;
@@ -41,10 +43,105 @@ public class SearchService {
      * 搜尋引擎整個無法使用時(GoogleQuery 丟出 IOException 或 IllegalStateException),
      * 丟出 SearchUnavailableException,讓介面顯示錯誤訊息而不是「沒有找到結果」。
      */
-    public ArrayList<SearchResult> search(String q) {
-        // TODO(Member C, Stage 3 → 4)
-        throw new UnsupportedOperationException("TODO(Member C): SearchService.search");
+    
+public ArrayList<SearchResult> search(String q) {
+
+    ArrayList<SearchResult> results = new ArrayList<>();
+
+    if (q == null || q.isBlank()) {
+        return results;
     }
+
+    q = q.trim();
+
+    // 1. 建立本次搜尋專用的關鍵字清單
+    KeywordList kws = KeywordList.defaultsFor(q);
+
+    // 2. 擴充原始查詢
+    List<String> queries = expander.expand(q);
+
+    // 3. 執行第一輪搜尋
+    List<WebTree> trees = runRound(queries, kws);
+
+    // 4. 取得排名前五名的首頁
+    List<WebPage> topPages = new ArrayList<>();
+
+    for (int i = 0; i < Math.min(5, trees.size()); i++) {
+        topPages.add(trees.get(i).getRoot().getWebPage());
+    }
+
+    // 5. 使用 TF-IDF 找出新關鍵字
+    List<Keyword> derived = expander.deriveKeywords(topPages, q);
+saveRelatedKeywords(q, derived);
+    // 6. 有新關鍵字才執行第二輪
+    if (MAX_ROUND > 1 && !derived.isEmpty()) {
+
+        StringBuilder expandedQuery = new StringBuilder(q);
+
+        for (Keyword keyword : derived) {
+            kws.add(keyword);
+            expandedQuery.append(" ").append(keyword.getName());
+        }
+
+        List<String> secondQueries =
+                expander.expand(expandedQuery.toString());
+
+        List<WebTree> secondTrees = runRound(secondQueries, kws);
+
+        // 7. 合併兩輪結果，依網址去重
+        LinkedHashMap<String, WebTree> merged =
+                new LinkedHashMap<>();
+
+        for (WebTree tree : trees) {
+            merged.put(tree.getRoot().getWebPage().getUrl(), tree);
+        }
+
+        for (WebTree tree : secondTrees) {
+            merged.put(tree.getRoot().getWebPage().getUrl(), tree);
+        }
+
+        trees = new ArrayList<>(merged.values());
+
+        // 8. 統一使用更新後的關鍵字重新計分
+        List<WebTree> rescoredTrees = new ArrayList<>();
+
+        for (WebTree tree : trees) {
+            try {
+                tree.setPostOrderScore(kws);
+                rescoredTrees.add(tree);
+            } catch (RuntimeException e) {
+                System.err.println(
+                        "Failed to rescore tree: "
+                        + tree.getRoot().getWebPage().getUrl()
+                );
+            }
+        }
+
+        trees = rescoredTrees;
+
+        // 9. 使用 QuickSort 重新排序
+        ranker.sort(trees);
+    }
+
+    // 10. 將網站樹轉換成 SearchResult
+    for (int i = 0; i < trees.size(); i++) {
+
+        WebTree tree = trees.get(i);
+        WebPage page = tree.getRoot().getWebPage();
+
+        results.add(new SearchResult(
+                i + 1,
+                page.getTitle(),
+                page.getUrl(),
+                tree.getTotalScore(),
+                calculateBreakdown(tree, kws),
+                tree
+        ));
+    }
+
+    return results;
+}
+
 
     /** 跑一輪:對每個查詢字串搜尋,以網址去重後建樹,呼叫 prefetcher.prefetch,再計分、排序。 */
     protected List<WebTree> runRound(List<String> queries, KeywordList kws) {
@@ -179,10 +276,52 @@ private void accumulateBreakdown(
 }
 
 
-    public List<String> relatedKeywords(String q) {
+   public List<String> relatedKeywords(String q) {
+
+    RequestAttributes request =
+            RequestContextHolder.getRequestAttributes();
+
+    if (request == null || q == null) {
         return List.of();
     }
 
+    Object value = request.getAttribute(
+            "movieFinder.related." + q.trim(),
+            RequestAttributes.SCOPE_REQUEST
+    );
+
+    List<String> names = new ArrayList<>();
+
+    if (value instanceof List<?> items) {
+        for (Object item : items) {
+            if (item instanceof String name) {
+                names.add(name);
+            }
+        }
+    }
+
+    return names;
+}
+private void saveRelatedKeywords(
+        String q, List<Keyword> derived) {
+
+    List<String> names = new ArrayList<>();
+
+    for (Keyword keyword : derived) {
+        names.add(keyword.getName());
+    }
+
+    RequestAttributes request =
+            RequestContextHolder.getRequestAttributes();
+
+    if (request != null) {
+        request.setAttribute(
+                "movieFinder.related." + q.trim(),
+                List.copyOf(names),
+                RequestAttributes.SCOPE_REQUEST
+        );
+    }
+}
     /** 所有 WebPage 都由此建立,測試時可覆寫成不連網的版本。 */
     protected WebPage newPage(String url, String title) {
         return new WebPage(url, title);

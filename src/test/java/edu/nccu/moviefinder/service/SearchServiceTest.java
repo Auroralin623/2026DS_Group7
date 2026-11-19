@@ -2,6 +2,9 @@ package edu.nccu.moviefinder.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import edu.nccu.moviefinder.model.Keyword;
 import edu.nccu.moviefinder.model.SearchResult;
@@ -13,11 +16,11 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import org.junit.jupiter.api.Disabled;
+
 import org.junit.jupiter.api.Test;
 
 /** 用假的相依元件測試流程,不連網。整合時需要 A、B、D、E 的部分都已完成或由假物件取代。 */
-@Disabled("Member C: remove this line once SearchService is implemented (needs Member A's model)")
+
 class SearchServiceTest {
     private static final String GOOD = "https://good.example/";
     private static final String WEAK = "https://weak.example/";
@@ -105,4 +108,63 @@ class SearchServiceTest {
     void oneBrokenSiteDoesNotFailTheSearch() {
         assertTrue(service(pages()).search("cat").size() >= 2);
     }
+
+
+    @Test
+    void relatedKeywordsReturnsDerivedTermsWithoutNewSearch() {
+
+        RequestContextHolder.setRequestAttributes(
+                new ServletRequestAttributes(
+                        new MockHttpServletRequest()));
+
+        try {
+            SearchService searchService = service(pages());
+
+            searchService.search("cat");
+
+            int callsBefore = googleCalls.size();
+
+            assertEquals(
+                    List.of("chef"),
+                    searchService.relatedKeywords("cat"));
+
+            assertEquals(
+                    callsBefore,
+                    googleCalls.size());
+
+        } finally {
+            RequestContextHolder.resetRequestAttributes();
+        }
+    }
+
+    @Test
+    void relatedKeywordsAreIsolatedBetweenRequests() {
+
+        SearchService searchService = service(pages());
+
+        try {
+            // 第一個使用者的請求
+            RequestContextHolder.setRequestAttributes(
+                    new ServletRequestAttributes(
+                            new MockHttpServletRequest()));
+
+            searchService.search("cat");
+
+            assertEquals(
+                    List.of("chef"),
+                    searchService.relatedKeywords("cat"));
+
+            // 第二個使用者的請求
+            RequestContextHolder.setRequestAttributes(
+                    new ServletRequestAttributes(
+                            new MockHttpServletRequest()));
+
+            assertTrue(
+                    searchService.relatedKeywords("cat").isEmpty());
+
+        } finally {
+            RequestContextHolder.resetRequestAttributes();
+        }
+    }
+
 }
