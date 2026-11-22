@@ -71,4 +71,45 @@ class KeywordExpanderTest {
         assertTrue(expander.deriveKeywords(
                 List.of(new WebPage("https://broken.example", "t", broken)), "cat").isEmpty());
     }
+
+    @Test
+    void filtersLowValueTermsObservedInRealSearch() {
+
+    List<Keyword> derived = expander.deriveKeywords(
+        List.of(page(
+            "nolan nolan cobb cobb director director "
+            + "like like member members one one"
+        )),
+        "Inception"
+    );
+
+    // Important movie-related terms should remain.
+    assertTrue(derived.stream()
+        .anyMatch(k -> k.getName().equalsIgnoreCase("nolan")));
+
+    assertTrue(derived.stream()
+        .anyMatch(k -> k.getName().equalsIgnoreCase("cobb")));
+
+    // Low-value terms should be filtered out.
+    assertFalse(derived.stream().anyMatch(k ->
+        k.getName().equalsIgnoreCase("like")
+        || k.getName().equalsIgnoreCase("member")
+        || k.getName().equalsIgnoreCase("members")
+        || k.getName().equalsIgnoreCase("one")
+    ));
+}
+
+@Test
+void limitsDerivedKeywordsToThreePerRound() {
+
+    List<Keyword> derived = expander.deriveKeywords(
+        List.of(page(
+            "director screenplay cinematography soundtrack "
+            + "editing producer composer"
+        )),
+        "Inception"
+    );
+
+    assertEquals(3, derived.size());
+}
 }

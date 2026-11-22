@@ -32,7 +32,7 @@ import org.springframework.stereotype.Service;
 public class KeywordExpander {
 
     private static final Pattern ENGLISH_WORD = Pattern.compile("[A-Za-z]{2,}");
-    private static final int MAX_DERIVED_KEYWORDS = 5;
+    private static final int MAX_DERIVED_KEYWORDS = 3;
     private static final double MAX_DERIVED_WEIGHT = KeywordList.USER_WEIGHT * 0.8;
 
     private final Set<String> stopwords;
@@ -214,7 +214,7 @@ public class KeywordExpander {
                 "was", "we", "were", "what", "when", "where", "which", "while", "who",
                 "why", "will", "with", "would", "you", "your", "about", "after", "also",
                 "before", "between", "movie", "movies", "film", "films", "review",
-                "reviews", "website", "webpage", "page", "http", "https", "www", "com"));
+                "reviews", "website", "webpage", "page", "http", "https", "www", "com", "like", "member", "members", "one"));
 
         return words;
     }
