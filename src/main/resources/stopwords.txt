@@ -128,3 +128,8 @@ http
 https
 www
 com
+# Low-value terms observed in real search results
+like
+member
+members
+one
