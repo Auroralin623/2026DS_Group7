@@ -1,80 +1,110 @@
 package edu.nccu.moviefinder.service;
 
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Document;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
 
 /**
- * - 負責抓取網頁內容並計算關鍵字出現次數。
- * - 英文關鍵字採用完整單字比對，中文維持原本比對方式。
- * - 字串搜尋採用 Boyer-Moore 演算法。
+ * 負責抓取網頁內容並計算關鍵字出現次數。
+ * 英文關鍵字採用完整單字比對，中文維持原本比對方式。
+ * 字串搜尋採用 Boyer-Moore 演算法，並支援跨輪內容快取與失敗網址不重試。
  */
 public class WordCounter {
 
-    private final String url;
-    private String content;
+    private static final int MAX_CACHE_SIZE = 500;
+    private static final ConcurrentHashMap<String, String> CONTENT_CACHE = new ConcurrentHashMap<>();
+    private static final Set<String> FAILED_URLS = ConcurrentHashMap.newKeySet();
 
-    /**
-     * - 用於正常營運：只傳入網址，後續透過 fetchContent() 抓取。
-     */
+    private final String url;
+    private volatile String content;
+
     public WordCounter(String url) {
         this.url = url;
     }
 
-    /**
-     * - 用於單元測試：直接傳入網址與測試內文，免去網路連線。
-     */
     public WordCounter(String url, String content) {
         this.url = url;
         this.content = content;
     }
 
-    /**
-     * - 抓取網頁內容（僅取純文字），並設定逾時和 User-Agent。
-     * - 修正：改為回傳 String，以符合其他測試或呼叫端的型別預期。
-     */
+    /** 供測試或需要重置狀態時清除快取 */
+    public static void clearCache() {
+        CONTENT_CACHE.clear();
+        FAILED_URLS.clear();
+    }
+
     public String fetchContent() throws IOException {
         if (content != null) {
             return content;
         }
         Document doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                .timeout(5000)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .header("Accept-Language", "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7")
+                .timeout(4000)
                 .get();
         this.content = doc.text();
         return this.content;
     }
 
     public String getContent() throws IOException {
-        if (content == null) {
-            content = fetchContent();
+        if (content != null) {
+            return content;
         }
-        return content;
+
+        // 僅對正式的 WordCounter 實例啟用跨輪 URL 快取（避免影響測試中的匿名覆寫子類別）
+        boolean useSharedCache = (this.getClass() == WordCounter.class) && (url != null && !url.isEmpty());
+
+        if (useSharedCache) {
+            if (FAILED_URLS.contains(url)) {
+                throw new IOException("Previously failed URL (skipped retry): " + url);
+            }
+            String cached = CONTENT_CACHE.get(url);
+            if (cached != null) {
+                this.content = cached;
+                return cached;
+            }
+        }
+
+        try {
+            String fetched = fetchContent();
+            this.content = fetched;
+            if (useSharedCache && fetched != null) {
+                if (CONTENT_CACHE.size() >= MAX_CACHE_SIZE) {
+                    CONTENT_CACHE.clear();
+                }
+                CONTENT_CACHE.put(url, fetched);
+            }
+            return fetched;
+        } catch (IOException e) {
+            if (useSharedCache) {
+                if (FAILED_URLS.size() >= MAX_CACHE_SIZE) {
+                    FAILED_URLS.clear();
+                }
+                FAILED_URLS.add(url);
+            }
+            throw e;
+        }
     }
 
-    /**
-     * - 計算關鍵字出現次數。
-     * - 中文維持原本比對方式，英文比對完整單字（利用 ASCII 邊界判斷避免中文緊鄰時被誤判）。
-     * - 內部改用 Boyer-Moore 演算法進行字串搜尋。
-     */
     public int countKeyword(String keyword) {
         if (content == null || keyword == null || keyword.isEmpty()) {
             return 0;
         }
 
-        // 檢查是否全為英文/數字（粗略判斷是否為英文關鍵字）
-        boolean isEnglishKeyword = keyword.chars().allMatch(c -> (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'));
+        boolean isEnglishKeyword = keyword.chars()
+                .allMatch(c -> (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'));
 
         if (!isEnglishKeyword) {
-            // 中文比對，改用 Boyer-Moore 演算法計算出現次數
             List<Integer> matches = boyerMooreSearchAll(content, keyword);
             return matches.size();
         } else {
-            // 英文完整單字比對，改用 Boyer-Moore 演算法找出位置後再做邊界確認
             int count = 0;
             String lowerContent = content.toLowerCase();
             String lowerKeyword = keyword.toLowerCase();
@@ -90,9 +120,6 @@ public class WordCounter {
         }
     }
 
-    /**
-     * Boyer-Moore 演算法實作（使用 Map 支援中文與所有 Unicode 字元，避免陣列邊界報錯）
-     */
     private List<Integer> boyerMooreSearchAll(String text, String pattern) {
         List<Integer> matches = new ArrayList<>();
         int n = text.length();
@@ -101,7 +128,6 @@ public class WordCounter {
             return matches;
         }
 
-        // 壞字元對照表
         Map<Character, Integer> badChar = new HashMap<>();
         for (int i = 0; i < m; i++) {
             badChar.put(pattern.charAt(i), i);
@@ -110,14 +136,12 @@ public class WordCounter {
         int s = 0;
         while (s <= (n - m)) {
             int j = m - 1;
-
             while (j >= 0 && pattern.charAt(j) == text.charAt(s + j)) {
                 j--;
             }
-
             if (j < 0) {
                 matches.add(s);
-                s += m; // 匹配成功後向右移動字串長度，確保不重複計算
+                s += m;
             } else {
                 char badCharInText = text.charAt(s + j);
                 int badCharShift = badChar.getOrDefault(badCharInText, -1);
@@ -128,27 +152,16 @@ public class WordCounter {
     }
 
     private boolean isWholeWord(String text, int start, int length) {
-        // 檢查前一個字元
-        if (start > 0) {
-            char prev = text.charAt(start - 1);
-            if (isAsciiLetterOrDigit(prev)) {
-                return false;
-            }
+        if (start > 0 && isAsciiLetterOrDigit(text.charAt(start - 1))) {
+            return false;
         }
-        // 檢查後一個字元
         int end = start + length;
-        if (end < text.length()) {
-            char next = text.charAt(end);
-            if (isAsciiLetterOrDigit(next)) {
-                return false;
-            }
+        if (end < text.length() && isAsciiLetterOrDigit(text.charAt(end))) {
+            return false;
         }
         return true;
     }
 
-    /**
-     * - 只把 ASCII 英文字母和數字當成單字的一部分，避免中文字被誤判為字母邊界。
-     */
     private boolean isAsciiLetterOrDigit(char c) {
         return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
     }
