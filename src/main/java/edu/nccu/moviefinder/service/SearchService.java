@@ -88,19 +88,23 @@ saveRelatedKeywords(q, derived);
 
         List<WebTree> secondTrees = runRound(secondQueries, kws);
 
-        // 7. 合併兩輪結果，依網址去重
-        LinkedHashMap<String, WebTree> merged =
-                new LinkedHashMap<>();
+      
+// 7. 合併兩輪結果，依標準化網址去重
+LinkedHashMap<String, WebTree> merged =
+        new LinkedHashMap<>();
 
-        for (WebTree tree : trees) {
-            merged.put(tree.getRoot().getWebPage().getUrl(), tree);
-        }
+for (WebTree tree : trees) {
+    String url = tree.getRoot().getWebPage().getUrl();
+    merged.put(normalizeUrl(url), tree);
+}
 
-        for (WebTree tree : secondTrees) {
-            merged.put(tree.getRoot().getWebPage().getUrl(), tree);
-        }
+for (WebTree tree : secondTrees) {
+    String url = tree.getRoot().getWebPage().getUrl();
+    merged.put(normalizeUrl(url), tree);
+}
 
-        trees = new ArrayList<>(merged.values());
+trees = new ArrayList<>(merged.values());
+
 
         // 8. 統一使用更新後的關鍵字重新計分
         List<WebTree> rescoredTrees = new ArrayList<>();
@@ -147,14 +151,19 @@ saveRelatedKeywords(q, derived);
     protected List<WebTree> runRound(List<String> queries, KeywordList kws) {
         // 1. 收集所有查詢的結果，並依 URL 去重
     LinkedHashMap<String, String> results = new LinkedHashMap<>();
+    java.util.HashSet<String> seenUrls = new java.util.HashSet<>();
 
     for (String query : queries) {
         try {
             LinkedHashMap<String, String> found = googleQuery.query(query);
 
             for (var entry : found.entrySet()) {
-                results.putIfAbsent(entry.getKey(), entry.getValue());
-            }
+    String normalizedUrl = normalizeUrl(entry.getKey());
+
+    if (seenUrls.add(normalizedUrl)) {
+        results.put(entry.getKey(), entry.getValue());
+    }
+}
         } catch (IOException | IllegalStateException e) {
             throw new SearchUnavailableException(
                 "Tavily search is unavailable", e);
@@ -200,6 +209,52 @@ saveRelatedKeywords(q, derived);
 
     return scoredTrees;
     }
+
+/** 移除不影響網頁內容的 URL 參數，作為去重依據。 */
+protected String normalizeUrl(String url) {
+    int fragmentIndex = url.indexOf('#');
+
+    if (fragmentIndex >= 0) {
+        url = url.substring(0, fragmentIndex);
+    }
+
+    int queryIndex = url.indexOf('?');
+
+    if (queryIndex < 0) {
+        return url;
+    }
+
+    String base = url.substring(0, queryIndex);
+    String query = url.substring(queryIndex + 1);
+
+    List<String> keptParams = new ArrayList<>();
+
+    for (String param : query.split("&")) {
+        String key = param.split("=", 2)[0]
+                .toLowerCase(java.util.Locale.ROOT);
+
+        if (key.startsWith("utm_")
+                || key.equals("fbclid")
+                || key.equals("gclid")) {
+            continue;
+        }
+
+        if (base.startsWith("https://www.businessinsider.com/")
+                && key.equals("op")) {
+            continue;
+        }
+
+        if (!param.isEmpty()) {
+            keptParams.add(param);
+        }
+    }
+
+    if (keptParams.isEmpty()) {
+        return base;
+    }
+
+    return base + "?" + String.join("&", keptParams);
+}
 
     /** 把一個網站建成 WebTree(根節點 + 最多 maxLinks 個子節點)。 */
     protected WebTree buildTree(String url, String title) {

@@ -26,6 +26,10 @@ class SearchServiceRoundTest {
 
                 results.put("https://good.example/", "Good");
                 results.put("https://weak.example/", "Weak");
+                results.put(
+    "https://good.example/?utm_source=google",
+    "Good Duplicate"
+);
                 return results;
             }
         };
@@ -108,4 +112,78 @@ class SearchServiceRoundTest {
                 results.get(1).getTotalScore()
         );
     }
+
+    @Test
+    void normalizeUrlRemovesTrackingParams() {
+        SearchService service = createService();
+
+        assertEquals(
+                "https://example.com/movie",
+                service.normalizeUrl(
+                    "https://example.com/movie?utm_source=google&fbclid=123"
+                )
+        );
+    }
+
+    @Test
+    void normalizeUrlRemovesBusinessInsiderOp() {
+        SearchService service = createService();
+
+        String url = "https://www.businessinsider.com/article";
+
+        assertEquals(
+                url,
+                service.normalizeUrl(url + "?op=1")
+        );
+    }
+
+    @Test
+    void normalizeUrlPreservesYoutubeVideoId() {
+        SearchService service = createService();
+
+        assertNotEquals(
+                service.normalizeUrl(
+                    "https://www.youtube.com/watch?v=AAA"
+                ),
+                service.normalizeUrl(
+                    "https://www.youtube.com/watch?v=BBB"
+                )
+        );
+    }
+
+    @Test
+    void normalizeUrlKeepsImportantParams() {
+        SearchService service = createService();
+
+        assertEquals(
+                "https://www.youtube.com/watch?v=AAA",
+                service.normalizeUrl(
+                    "https://www.youtube.com/watch?v=AAA&utm_source=google"
+                )
+        );
+    }
+
+@Test
+void runRoundRemovesDuplicateUrls() {
+    SearchService service = createService();
+
+    KeywordList kws = new KeywordList();
+    kws.add(new Keyword("cat", 5.0));
+
+    List<WebTree> results = service.runRound(
+            List.of("cat movie", "cat film"), kws
+    );
+
+    assertEquals(2, results.size());
+
+    long goodCount = results.stream()
+            .filter(tree -> service.normalizeUrl(
+                    tree.getRoot().getWebPage().getUrl()
+            ).equals("https://good.example/"))
+            .count();
+
+    assertEquals(1L, goodCount);
+}
+
+
 }
