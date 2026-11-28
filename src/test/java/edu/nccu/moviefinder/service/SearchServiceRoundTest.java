@@ -26,6 +26,7 @@ class SearchServiceRoundTest {
 
                 results.put("https://good.example/", "Good");
                 results.put("https://weak.example/", "Weak");
+                results.put("http://good.example/", "Good HTTP Duplicate");
                 results.put(
     "https://good.example/?utm_source=google",
     "Good Duplicate"
@@ -184,6 +185,36 @@ void runRoundRemovesDuplicateUrls() {
 
     assertEquals(1L, goodCount);
 }
+@Test
+void normalizeUrlTreatsHttpAndHttpsAsSame() {
+    SearchService service = createService();
 
+    assertEquals(
+            service.normalizeUrl("http://example.com/movie"),
+            service.normalizeUrl("https://example.com/movie")
+    );
+}
+
+@Test
+void normalizeUrlHandlesProtocolAndTrackingParams() {
+    SearchService service = createService();
+
+    assertEquals(
+            "https://example.com/movie",
+            service.normalizeUrl(
+                    "http://example.com/movie?utm_source=google&fbclid=123"
+            )
+    );
+}
+
+@Test
+void normalizeUrlPreservesDifferentPaths() {
+    SearchService service = createService();
+
+    assertNotEquals(
+            service.normalizeUrl("http://example.com/movie1"),
+            service.normalizeUrl("https://example.com/movie2")
+    );
+}
 
 }

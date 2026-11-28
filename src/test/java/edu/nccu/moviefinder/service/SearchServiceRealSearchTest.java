@@ -108,8 +108,7 @@ class SearchServiceRealSearchTest {
                 new Ranker()
         );
 
-        String query = "Inception";
-
+        String query = System.getProperty("search.query", "Inception");
         long startTime = System.nanoTime();
 
         List<SearchResult> results = service.search(query);
@@ -166,9 +165,8 @@ class SearchServiceRealSearchTest {
             assertEquals(i + 1, result.getRank());
 
             assertTrue(
-                    urls.add(result.getUrl()),
-                    "不應出現重複網址");
-
+           urls.add(service.normalizeUrl(result.getUrl())),
+           "不應出現標準化後的重複網址: " + result.getUrl());
             if (i > 0) {
                 assertTrue(
                         results.get(i - 1).getScore()
