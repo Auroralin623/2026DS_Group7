@@ -72,17 +72,17 @@
                 </section>
 
                 <h2 class="list-title" th:text="#{result.list}">Website results</h2>
-                <ol class="result-list">
-                    <li class="result" th:each="r : ${results}">
+                <ol class="result-list" th:classappend="${results.size() > visible} ? 'is-collapsed'">
+                    <li class="result" th:each="r : ${results}" th:with="chips=${details.get(r.rank)}">
                         <span class="result-rank" th:text="${#numbers.formatInteger(r.rank, 2)}">01</span>
                         <div class="result-body">
                             <a class="result-title" th:href="${r.url}" th:text="${r.title}" target="_blank" rel="noopener noreferrer">Title</a>
                             <p class="result-url" th:text="${r.url}">https://example.com</p>
                             <p class="result-snippet" th:unless="${r.snippet.isEmpty()}" th:text="${r.snippet}">Snippet</p>
-                            <details class="result-details" th:unless="${r.breakdown.isEmpty() and r.tree.root.children.isEmpty()}">
+                            <details class="result-details" th:unless="${chips.isEmpty() and r.tree.root.children.isEmpty()}">
                                 <summary th:text="#{result.details}">Score details</summary>
-                                <ul class="chips" th:unless="${r.breakdown.isEmpty()}">
-                                    <li th:each="b : ${r.breakdown}"><span th:text="${b.key}">kw</span> <strong th:text="${#numbers.formatDecimal(b.value, 1, 1)}">0.0</strong></li>
+                                <ul class="chips" th:unless="${chips.isEmpty()}">
+                                    <li th:each="b : ${chips}" th:classappend="${b.value < 0} ? 'is-negative'"><span th:text="${b.keyword}">kw</span> <strong th:text="${#numbers.formatDecimal(b.value, 1, 1)}">0.0</strong></li>
                                 </ul>
                                 <div th:unless="${r.tree.root.children.isEmpty()}">
                                     <p class="tree-title" th:text="#{result.subpages(${r.tree.root.children.size()})}">Subpages (2)</p>
@@ -104,6 +104,7 @@
                         </a>
                     </li>
                 </ol>
+                <button th:replace="~{fragments :: showAll(${results.size()}, ${visible})}"></button>
             </div>
         </div>
     </main>

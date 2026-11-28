@@ -22,6 +22,10 @@ public final class ResultPresenter {
     /** 前 TOP_N 筆中,至少這麼多筆標題以搜尋字詞開頭,就顯示 Top match。 */
     static final int NARROW_MIN_MATCHES = 2;
     static final int MAX_SOURCES = 6;
+    /** 一開始顯示的結果筆數,其餘按「顯示全部」才展開。和 style.css 的 .is-collapsed 規則一致。 */
+    public static final int VISIBLE_RESULTS = 10;
+    /** 分數顯示到小數一位,絕對值小於這個數字會顯示成 0.0 或 -0.0,所以不列出。 */
+    private static final double SHOWN_MIN = 0.05;
 
     private static final Set<String> GENERIC_WORDS = Set.of("movie", "movies", "film", "films");
 
@@ -119,7 +123,10 @@ public final class ResultPresenter {
         return sources;
     }
 
-    /** 各關鍵字的分數貢獻,由高到低排序,percent 是相對於最大貢獻的比例(畫長條圖用)。 */
+    /**
+     * 各關鍵字的分數貢獻,由高到低排序,percent 是相對於最大貢獻的比例(畫長條圖用)。
+     * 沒有貢獻(顯示出來會是 0.0)的關鍵字不列出。
+     */
     public static List<Contribution> contributions(SearchResult r) {
         if (r == null || r.getBreakdown() == null || r.getBreakdown().isEmpty()) {
             return List.of();
@@ -127,11 +134,23 @@ public final class ResultPresenter {
         double max = r.getBreakdown().values().stream().mapToDouble(Math::abs).max().orElse(0);
         List<Contribution> list = new ArrayList<>();
         for (Map.Entry<String, Double> e : r.getBreakdown().entrySet()) {
+            if (Math.abs(e.getValue()) < SHOWN_MIN) {
+                continue;
+            }
             int percent = max == 0 ? 0 : (int) Math.round(Math.abs(e.getValue()) / max * 100);
             list.add(new Contribution(e.getKey(), e.getValue(), percent));
         }
         list.sort(Comparator.comparingDouble(Contribution::value).reversed());
         return list;
+    }
+
+    /** 名次 → 該筆結果的分數明細,給結果頁每一筆的「分數明細」使用。 */
+    public static Map<Integer, List<Contribution>> details(List<SearchResult> results) {
+        Map<Integer, List<Contribution>> details = new HashMap<>();
+        for (SearchResult r : results) {
+            details.put(r.getRank(), contributions(r));
+        }
+        return details;
     }
 
     /** 網址 → 在 Tavily 原始結果中的排名(從 1 開始),給比較頁計算名次變化。 */

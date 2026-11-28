@@ -56,6 +56,22 @@ class SearchControllerTest {
     }
 
     @Test
+    void pagesIncludeTheWaitingScreenHiddenUntilASearchStarts() throws Exception {
+        mvc.perform(get("/"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("id=\"loading\" role=\"status\" aria-live=\"polite\" hidden")))
+                .andExpect(content().string(containsString("This can take up to a minute.")));
+    }
+
+    @Test
+    void shortListsHaveNoShowAllButton() throws Exception {
+        mvc.perform(get("/search").param("q", "animals"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(not(containsString("class=\"show-all\""))))
+                .andExpect(content().string(not(containsString("is-collapsed"))));
+    }
+
+    @Test
     void searchNumbersEachResult() throws Exception {
         mvc.perform(get("/search").param("q", "cat"))
                 .andExpect(content().string(containsString("class=\"result-rank\">01<")))

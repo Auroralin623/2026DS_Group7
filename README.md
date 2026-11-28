@@ -30,7 +30,7 @@ git checkout -b feature/模組-內容
 
 mock 模式只顯示假資料,不會執行後端組員的程式。後端的測試方式見 [怎麼測試自己的部分](docs/TEAM_PLAN.md#怎麼測試自己的部分)。
 
-後端完成前,不加 mock profile 啟動的網站在搜尋時會回傳錯誤,這是正常的。
+不加 mock profile 啟動就是完整的真實搜尋,需要先設定 `TAVILY_API_KEY`(見下方)。一次搜尋會讀取每個網站和它的子網頁,大約要等一分鐘。
 
 ## Tavily 金鑰
 
