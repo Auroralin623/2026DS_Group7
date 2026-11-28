@@ -13,6 +13,8 @@
                 theme = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
             }
             document.documentElement.setAttribute("data-theme", theme);
+            // Long lists start collapsed only when the "show all" button can work.
+            document.documentElement.classList.add("js");
         })();
     </script>
     <title th:text="${title}">MovieFinder</title>
@@ -81,6 +83,59 @@
             }
         })();
     </script>
+
+    <!-- Shown while a search is running: a real search reads every website, so it can take a while. -->
+    <div class="loading" id="loading" role="status" aria-live="polite" hidden>
+        <div class="loading-card">
+            <svg class="loading-reel" viewBox="0 0 48 48" aria-hidden="true">
+                <circle cx="24" cy="24" r="21" class="reel-rim"/>
+                <circle cx="24" cy="24" r="3" class="reel-hole"/>
+                <circle cx="24" cy="11" r="5" class="reel-hole"/><circle cx="35.3" cy="17.5" r="5" class="reel-hole"/>
+                <circle cx="35.3" cy="30.5" r="5" class="reel-hole"/><circle cx="24" cy="37" r="5" class="reel-hole"/>
+                <circle cx="12.7" cy="30.5" r="5" class="reel-hole"/><circle cx="12.7" cy="17.5" r="5" class="reel-hole"/>
+            </svg>
+            <p class="loading-title" th:text="#{loading.title}">Searching…</p>
+            <p class="loading-note" th:text="#{loading.note}">MovieFinder is reading each website and its subpages. This can take up to a minute.</p>
+        </div>
+    </div>
+    <script>
+        // Show the waiting screen when a search starts: the search forms, and any link that runs a search.
+        (function () {
+            var loading = document.getElementById("loading");
+            document.addEventListener("DOMContentLoaded", function () {
+                document.body.appendChild(loading);
+            });
+            function show() {
+                loading.hidden = false;
+            }
+            function runsSearch(link) {
+                if (link.target === "_blank" || link.origin !== location.origin) {
+                    return false;
+                }
+                var path = link.pathname.replace(/\/$/, "");
+                var isSearchPage = /\/(search|compare)$/.test(path);
+                return isSearchPage && new URLSearchParams(link.search).has("q");
+            }
+            document.addEventListener("submit", function (e) {
+                if (e.target.matches && e.target.matches("form.search")) {
+                    show();
+                }
+            });
+            document.addEventListener("click", function (e) {
+                if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+                    return;
+                }
+                var link = e.target.closest ? e.target.closest("a[href]") : null;
+                if (link && runsSearch(link)) {
+                    show();
+                }
+            });
+            // Coming back with the browser's Back button restores the page as it was left.
+            window.addEventListener("pageshow", function () {
+                loading.hidden = true;
+            });
+        })();
+    </script>
 </header>
 
 <!-- Search form. action = /search or /compare. -->
@@ -105,6 +160,11 @@
     <span th:text="${label}">Compare with Tavily</span>
     <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
 </a>
+
+<!-- Button under a long list. total = number of items; visible = how many are shown before it is pressed. -->
+<button th:fragment="showAll(total, visible)" type="button" class="show-all" th:if="${total > visible}"
+        th:attr="data-visible=${visible}" th:text="#{result.showAll(${total})}"
+        onclick="var list=this.previousElementSibling,first=list.children[this.dataset.visible];list.classList.remove('is-collapsed');this.remove();var a=first&amp;&amp;first.querySelector('a');if(a){a.focus();}">Show all 49 results</button>
 
 <!-- External link icon. -->
 <svg th:fragment="externalIcon" class="ext-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">

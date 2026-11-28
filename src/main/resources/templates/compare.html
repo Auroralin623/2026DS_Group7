@@ -41,7 +41,7 @@
                     <h2 th:text="#{compare.ours}">MovieFinder ranking</h2>
                     <p class="notice notice--error notice--small" th:if="${resultsError}" role="alert" th:text="#{search.unavailable}">Search is temporarily unavailable.</p>
                     <p class="notice notice--small" th:if="${results.isEmpty() and resultsError == null}" th:text="#{compare.none}">No results.</p>
-                    <ol class="compare-list" th:unless="${results.isEmpty()}">
+                    <ol class="compare-list" th:unless="${results.isEmpty()}" th:classappend="${results.size() > visible} ? 'is-collapsed'">
                         <li th:each="r : ${results}" th:with="was=${tavilyRanks.get(r.url)}">
                             <span class="compare-rank" th:text="${#numbers.formatInteger(r.rank, 2)}">01</span>
                             <div class="compare-text">
@@ -57,6 +57,7 @@
                                   th:attr="aria-label=#{compare.same}">=</span>
                         </li>
                     </ol>
+                    <button th:replace="~{fragments :: showAll(${results.size()}, ${visible})}"></button>
                 </section>
             </div>
         </th:block>

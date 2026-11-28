@@ -1123,6 +1123,103 @@ html:lang(zh-Hant) .hero-compare-note {
     font-size: 11px;
 }
 
+.chips .is-negative strong {
+    color: var(--negative);
+}
+
+/* Long lists show the first 10 items (ResultPresenter.VISIBLE_RESULTS) until "show all" is pressed. */
+.js .is-collapsed > li:nth-child(n + 11) {
+    display: none;
+}
+
+.show-all {
+    display: none;
+    align-self: center;
+    margin: 18px auto 0;
+    padding: 10px 22px;
+    border: 1px solid var(--gold);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-serif);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.js .show-all {
+    display: block;
+}
+
+.show-all:hover {
+    background: var(--gold-soft);
+}
+
+/* ---------- Waiting screen ---------- */
+
+.loading {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: color-mix(in srgb, var(--bg) 86%, transparent);
+}
+
+.loading[hidden] {
+    display: none;
+}
+
+.loading-card {
+    max-width: 380px;
+    padding: 28px 32px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+
+.loading-reel {
+    width: 56px;
+    height: 56px;
+    animation: reel-spin 2.4s linear infinite;
+}
+
+.loading-reel .reel-rim {
+    fill: var(--gold);
+}
+
+.loading-reel .reel-hole {
+    fill: var(--surface);
+}
+
+.loading-title {
+    margin: 14px 0 6px;
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 600;
+}
+
+.loading-note {
+    margin: 0;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+@keyframes reel-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .loading-reel {
+        animation: none;
+    }
+}
+
 .tree-title {
     margin: 12px 0 0;
     color: var(--muted);

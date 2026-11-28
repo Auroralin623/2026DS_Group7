@@ -105,6 +105,40 @@ class ResultPresenterTest {
     }
 
     @Test
+    void contributionsLeaveOutKeywordsThatWouldShowAsZero() {
+        HashMap<String, Double> breakdown = new HashMap<>();
+        breakdown.put("cat", 40.0);
+        breakdown.put("電影", 0.0);
+        breakdown.put("showtimes", -0.0);
+        breakdown.put("plot", 0.04);
+        breakdown.put("ticket", -0.5);
+        WebTree tree = new WebTree(WebNode.fixture(WebPage.fixture("u", "t", new HashMap<>(), 39.5), 39.5));
+
+        List<ResultPresenter.Contribution> list =
+                ResultPresenter.contributions(new SearchResult(1, "t", "u", 39.5, breakdown, tree));
+
+        assertEquals(List.of("cat", "ticket"), list.stream().map(ResultPresenter.Contribution::keyword).toList());
+    }
+
+    @Test
+    void detailsAreSortedForEveryResult() {
+        HashMap<String, Double> first = new HashMap<>();
+        first.put("review", 20.0);
+        first.put("cat", 40.0);
+        HashMap<String, Double> second = new HashMap<>();
+        second.put("film", 5.0);
+        second.put("cat", 3.0);
+        WebTree tree = new WebTree(WebNode.fixture(WebPage.fixture("u", "t", new HashMap<>(), 0), 0));
+
+        Map<Integer, List<ResultPresenter.Contribution>> details = ResultPresenter.details(List.of(
+                new SearchResult(1, "a", "https://a.example", 60, first, tree),
+                new SearchResult(2, "b", "https://b.example", 8, second, tree)));
+
+        assertEquals(List.of("cat", "review"), details.get(1).stream().map(ResultPresenter.Contribution::keyword).toList());
+        assertEquals(List.of("film", "cat"), details.get(2).stream().map(ResultPresenter.Contribution::keyword).toList());
+    }
+
+    @Test
     void ranksFollowTavilyOrder() {
         LinkedHashMap<String, String> tavily = new LinkedHashMap<>();
         tavily.put("https://b.example", "B");

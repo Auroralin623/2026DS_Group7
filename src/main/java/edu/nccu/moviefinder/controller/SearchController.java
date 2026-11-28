@@ -63,6 +63,8 @@ public class SearchController {
         model.addAttribute("sources", narrow ? ResultPresenter.relatedSources(results) : List.of());
         model.addAttribute("contributions",
                 ResultPresenter.contributions(results.isEmpty() ? null : results.get(0)));
+        model.addAttribute("details", ResultPresenter.details(results));
+        model.addAttribute("visible", ResultPresenter.VISIBLE_RESULTS);
         model.addAttribute("relatedKeywords", results.isEmpty() ? List.of() : relatedKeywords(q));
         return "result";
     }
@@ -93,6 +95,7 @@ public class SearchController {
         model.addAttribute("google", tavily);
         model.addAttribute("tavilyRanks", ResultPresenter.ranks(tavily));
         model.addAttribute("results", results);
+        model.addAttribute("visible", ResultPresenter.VISIBLE_RESULTS);
         return "compare";
     }
 
