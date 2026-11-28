@@ -45,9 +45,15 @@ class SearchServiceTest {
             public LinkedHashMap<String, String> query(String q) {
                 googleCalls.add(q);
                 LinkedHashMap<String, String> results = new LinkedHashMap<>();
-                results.put(WEAK, "Weak");
-                results.put(GOOD, "Good");
-                results.put(BROKEN, "Broken");
+               results.put(WEAK, "Weak");
+
+if (q.contains("chef")) {
+    results.put(GOOD + "?utm_source=google", "Good");
+} else {
+    results.put(GOOD, "Good");
+}
+
+results.put(BROKEN, "Broken");
                 return results;
             }
         };
@@ -57,7 +63,10 @@ class SearchServiceTest {
                 if (url.equals(BROKEN)) {
                     throw new IOException("HTTP 500");
                 }
-                return url.equals(GOOD) ? List.of(GOOD + "sub") : List.of();
+                return (url.equals(GOOD)
+        || url.equals(GOOD + "?utm_source=google"))
+        ? List.of(GOOD + "sub")
+        : List.of();
             }
         };
         Ranker ranker = new Ranker() {
@@ -69,7 +78,13 @@ class SearchServiceTest {
         return new SearchService(expander, google, crawler, new PagePrefetcher(), ranker) {
             @Override
             protected WebPage newPage(String url, String title) {
-                return new WebPage(url, title, new WordCounter(url, pages.getOrDefault(url, "")));
+                return new WebPage(
+        url, title,
+        new WordCounter(
+                url,
+                pages.getOrDefault(normalizeUrl(url), "")
+        )
+);
             }
         };
     }
@@ -82,7 +97,8 @@ class SearchServiceTest {
     void ranksByScoreAndNumbersFromOne() {
         List<SearchResult> results = service(pages()).search("cat");
 
-        assertEquals(GOOD, results.get(0).getUrl());
+        assertEquals(GOOD + "?utm_source=google",
+        results.get(0).getUrl());
         assertEquals(1, results.get(0).getRank());
         assertEquals(2, results.get(1).getRank());
         assertTrue(results.get(0).getScore() >= results.get(1).getScore());
@@ -166,5 +182,25 @@ class SearchServiceTest {
             RequestContextHolder.resetRequestAttributes();
         }
     }
+
+@Test
+void removesDuplicateUrlsAcrossRounds() {
+    SearchService searchService = service(pages());
+
+    List<SearchResult> results =
+            searchService.search("cat");
+
+    assertEquals(2, googleCalls.size());
+
+    assertEquals(3, results.size());
+
+    long goodCount = results.stream()
+            .filter(result -> searchService.normalizeUrl(
+                    result.getUrl()
+            ).equals(GOOD))
+            .count();
+
+    assertEquals(1L, goodCount);
+}
 
 }
