@@ -48,7 +48,9 @@ class SearchServiceTest {
                results.put(WEAK, "Weak");
 
 if (q.contains("chef")) {
-    results.put(GOOD + "?utm_source=google", "Good");
+    results.put(
+        "http://good.example/?utm_source=google", "Good"
+    );
 } else {
     results.put(GOOD, "Good");
 }
@@ -63,8 +65,10 @@ results.put(BROKEN, "Broken");
                 if (url.equals(BROKEN)) {
                     throw new IOException("HTTP 500");
                 }
-                return (url.equals(GOOD)
-        || url.equals(GOOD + "?utm_source=google"))
+
+     return (url.equals(GOOD)
+        || url.equals(GOOD + "?utm_source=google")
+        || url.equals("http://good.example/?utm_source=google"))
         ? List.of(GOOD + "sub")
         : List.of();
             }
@@ -97,7 +101,7 @@ results.put(BROKEN, "Broken");
     void ranksByScoreAndNumbersFromOne() {
         List<SearchResult> results = service(pages()).search("cat");
 
-        assertEquals(GOOD + "?utm_source=google",
+    assertEquals("http://good.example/?utm_source=google",
         results.get(0).getUrl());
         assertEquals(1, results.get(0).getRank());
         assertEquals(2, results.get(1).getRank());

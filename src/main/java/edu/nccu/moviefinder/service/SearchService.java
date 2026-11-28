@@ -1,4 +1,7 @@
 package edu.nccu.moviefinder.service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import edu.nccu.moviefinder.model.Keyword;
@@ -28,6 +31,10 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class SearchService {
+
+    private static final Logger logger =
+            LoggerFactory.getLogger(SearchService.class);
+
     public static final int MAX_ROUND = 2;
     /** 同時找子網頁的網站數。 */
     private static final int BUILD_THREADS = 12;
@@ -126,10 +133,8 @@ trees = new ArrayList<>(merged.values());
                 tree.setPostOrderScore(kws);
                 rescoredTrees.add(tree);
             } catch (RuntimeException e) {
-                System.err.println(
-                        "Failed to rescore tree: "
-                        + tree.getRoot().getWebPage().getUrl()
-                );
+               logger.warn("Failed to rescore tree: {}",
+        tree.getRoot().getWebPage().getUrl(), e);
             }
         }
 
@@ -196,11 +201,9 @@ trees = new ArrayList<>(merged.values());
         tree.setPostOrderScore(kws);
         scoredTrees.add(tree);
     } catch (RuntimeException e) {
-        System.err.println(
-            "Failed to score tree: "
-            + tree.getRoot().getWebPage().getUrl()
-            + ": " + e.getMessage()
-        );
+
+         logger.warn("Failed to score tree: {}",
+        tree.getRoot().getWebPage().getUrl(), e);
     }
 }
 
@@ -212,8 +215,13 @@ trees = new ArrayList<>(merged.values());
 
 /** 移除不影響網頁內容的 URL 參數，作為去重依據。 */
 protected String normalizeUrl(String url) {
-    int fragmentIndex = url.indexOf('#');
 
+    // 統一 HTTP 與 HTTPS，避免同一網頁重複出現
+    if (url.startsWith("http://")) {
+        url = "https://" + url.substring(7);
+    }
+
+    int fragmentIndex = url.indexOf('#');
     if (fragmentIndex >= 0) {
         url = url.substring(0, fragmentIndex);
     }
@@ -289,9 +297,7 @@ protected String normalizeUrl(String url) {
                     // 來不及找完子網頁:仍保留這個網站,只是沒有子網頁
                     trees.add(new WebTree(new WebNode(newPage(url, title))));
                 } catch (ExecutionException e) {
-                    System.err.println(
-                            "Failed to build tree for " + url
-                            + ": " + e.getCause().getMessage());
+                    logger.warn("Failed to build tree for {}", url, e.getCause());
                 }
             }
         } catch (InterruptedException e) {
