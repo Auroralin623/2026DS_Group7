@@ -20,24 +20,14 @@ public class SubLinkCrawler {
     private int maxLinks = 5;
     private final int maxDepth = 1;
 
-    /**
-     * 預設建構子，預設最大連結數為 5。
-     */
     public SubLinkCrawler() {
         this.maxLinks = 5;
     }
 
-    /**
-     * 支援自定義最大連結數的建構子（供單元測試使用，例如 new SubLinkCrawler(5)）。
-     */
     public SubLinkCrawler(int maxLinks) {
         this.maxLinks = maxLinks;
     }
 
-    /**
-     * 用 Jsoup 抓取 HTML。
-     * 宣告 throws IOException，以相容測試檔覆寫時的例外規範。
-     */
     public List<String> getSubLinks(String url) throws IOException {
         Document doc = Jsoup.connect(url)
                 .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
@@ -46,9 +36,6 @@ public class SubLinkCrawler {
         return extractLinks(doc, url);
     }
 
-    /**
-     * 讓測試可以直接傳入 HTML 字串與 Base URL 進行解析。
-     */
     public List<String> extractLinks(String html, String baseUrl) {
         if (html == null || html.isEmpty()) {
             return new ArrayList<>();
@@ -57,9 +44,6 @@ public class SubLinkCrawler {
         return extractLinks(doc, baseUrl);
     }
 
-    /**
-     * 從 Document 中擷取最多指定數量的同網域子網頁，去除重複、# 錨點、Base Page 以及非網頁檔案。
-     */
     public List<String> extractLinks(Document doc, String baseUrl) {
         List<String> validLinks = new ArrayList<>();
         if (doc == null || baseUrl == null) {
@@ -69,7 +53,6 @@ public class SubLinkCrawler {
         Set<String> seenUrls = new HashSet<>();
         Elements links = doc.select("a[href]");
 
-        // 解析基本網域 (例如 https://example.com)
         java.net.URI baseUri;
         try {
             baseUri = new java.net.URI(baseUrl);
@@ -78,8 +61,8 @@ public class SubLinkCrawler {
         }
         String baseHost = baseUri.getHost();
 
-        // 統一正規化 baseUrl（去除結尾斜線，方便後續比對）
-        String normalizedBase = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        String normalizedBase = stripTrackingParams(baseUrl);
+        normalizedBase = normalizedBase.endsWith("/") ? normalizedBase.substring(0, normalizedBase.length() - 1) : normalizedBase;
 
         for (Element link : links) {
             if (validLinks.size() >= maxLinks) {
@@ -91,26 +74,29 @@ public class SubLinkCrawler {
                 continue;
             }
 
-            // 去除 # 錨點
+            // 去除 # 錨點與行銷追蹤參數
             int hashIdx = absUrl.indexOf('#');
             if (hashIdx != -1) {
                 absUrl = absUrl.substring(0, hashIdx);
             }
+            absUrl = stripTrackingParams(absUrl);
 
-            // 檢查是否為空或已經看過
             if (absUrl.isEmpty() || seenUrls.contains(absUrl)) {
                 continue;
             }
 
-            // 檢查是否為起始網頁本身 (Base Page)，避免把首頁自己抓進子連結
+            // 檢查是否為起始網頁本身 (Base Page)
             String normalizedAbs = absUrl.endsWith("/") ? absUrl.substring(0, absUrl.length() - 1) : absUrl;
             if (normalizedAbs.equals(normalizedBase)) {
                 continue;
             }
 
-            // 檢查副檔名，過濾圖片、PDF 等非網頁檔案
+            // 過濾非網頁檔案與無電影內容的功能頁面
             String lowerUrl = absUrl.toLowerCase();
             if (lowerUrl.matches(".*\\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|css|js)(\\?.*)?$")) {
+                continue;
+            }
+            if (lowerUrl.matches(".*(/login|/signin|/signup|/register|/privacy|/terms|/cookie|/account)(/.*|\\?.*)?$")) {
                 continue;
             }
 
@@ -133,5 +119,27 @@ public class SubLinkCrawler {
         }
 
         return validLinks;
+    }
+
+    /** 移除 utm_、fbclid、gclid 等追蹤參數，保留如 ?id=123 的正常頁面參數 */
+    private String stripTrackingParams(String url) {
+        int queryIdx = url.indexOf('?');
+        if (queryIdx == -1) {
+            return url;
+        }
+        String basePart = url.substring(0, queryIdx);
+        String queryPart = url.substring(queryIdx + 1);
+        List<String> keptParams = new ArrayList<>();
+        for (String param : queryPart.split("&")) {
+            String lowerParam = param.toLowerCase();
+            if (!lowerParam.startsWith("utm_")
+                    && !lowerParam.startsWith("fbclid=")
+                    && !lowerParam.startsWith("gclid=")
+                    && !lowerParam.startsWith("ref=")
+                    && !lowerParam.startsWith("ir=")) {
+                keptParams.add(param);
+            }
+        }
+        return keptParams.isEmpty() ? basePart : basePart + "?" + String.join("&", keptParams);
     }
 }
