@@ -12,6 +12,14 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.springframework.stereotype.Service;
 
 /**
@@ -21,6 +29,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class SearchService {
     public static final int MAX_ROUND = 2;
+    /** 同時找子網頁的網站數。 */
+    private static final int BUILD_THREADS = 12;
+    /** 一輪中找子網頁的時間上限。 */
+    private static final long BUILD_TIMEOUT_SECONDS = 8;
 
     protected final KeywordExpander expander;
     protected final GoogleQuery googleQuery;
@@ -170,20 +182,8 @@ trees = new ArrayList<>(merged.values());
         }
     }
 
-    // 2. 將每個搜尋結果建立成網站樹
-    List<WebTree> trees = new ArrayList<>();
-
-    for (var entry : results.entrySet()) {
-    try {
-        WebTree tree = buildTree(entry.getKey(), entry.getValue());
-        trees.add(tree);
-    } catch (RuntimeException e) {
-        System.err.println(
-            "Failed to build tree for " + entry.getKey()
-            + ": " + e.getMessage()
-        );
-    }
-}
+    // 2. 將每個搜尋結果建立成網站樹(同時進行,順序維持和搜尋結果相同)
+    List<WebTree> trees = buildTrees(results);
 
     // 3. 預先抓取所有網頁內容
     prefetcher.prefetch(trees);
@@ -255,6 +255,53 @@ protected String normalizeUrl(String url) {
 
     return base + "?" + String.join("&", keptParams);
 }
+
+    /**
+     * 同時建立所有網站樹。buildTree 要連到每個網站找子網頁,一個接一個做的話,
+     * 三十個網站就要等三十次,所以改用執行緒池一起做。
+     * 回傳的順序和 results 相同。超過時間上限還沒找完子網頁的網站,保留只有根節點的樹;
+     * 建樹失敗的網站略過。
+     */
+    protected List<WebTree> buildTrees(LinkedHashMap<String, String> results) {
+        List<WebTree> trees = new ArrayList<>();
+        if (results.isEmpty()) {
+            return trees;
+        }
+
+        List<Map.Entry<String, String>> entries = new ArrayList<>(results.entrySet());
+        List<Callable<WebTree>> tasks = new ArrayList<>();
+        for (Map.Entry<String, String> entry : entries) {
+            tasks.add(() -> buildTree(entry.getKey(), entry.getValue()));
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(
+                Math.min(BUILD_THREADS, tasks.size()));
+        try {
+            List<Future<WebTree>> futures = executor.invokeAll(
+                    tasks, BUILD_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+            for (int i = 0; i < futures.size(); i++) {
+                String url = entries.get(i).getKey();
+                String title = entries.get(i).getValue();
+                try {
+                    trees.add(futures.get(i).get());
+                } catch (CancellationException e) {
+                    // 來不及找完子網頁:仍保留這個網站,只是沒有子網頁
+                    trees.add(new WebTree(new WebNode(newPage(url, title))));
+                } catch (ExecutionException e) {
+                    System.err.println(
+                            "Failed to build tree for " + url
+                            + ": " + e.getCause().getMessage());
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            executor.shutdownNow();
+        }
+
+        return trees;
+    }
 
     /** 把一個網站建成 WebTree(根節點 + 最多 maxLinks 個子節點)。 */
     protected WebTree buildTree(String url, String title) {
