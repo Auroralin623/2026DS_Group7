@@ -40,8 +40,8 @@ public class SubLinkCrawler {
      */
     public List<String> getSubLinks(String url) throws IOException {
         Document doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                .timeout(5000)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                .timeout(4000)
                 .get();
         return extractLinks(doc, url);
     }
@@ -111,6 +111,11 @@ public class SubLinkCrawler {
             // 檢查副檔名，過濾圖片、PDF 等非網頁檔案
             String lowerUrl = absUrl.toLowerCase();
             if (lowerUrl.matches(".*\\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|mp4|css|js)(\\?.*)?$")) {
+                continue;
+            }
+
+            // 過濾登入、註冊、隱私權條款等無電影內容的功能頁面
+            if (lowerUrl.matches(".*(/login|/signin|/signup|/register|/privacy|/terms|/cookie|/account)(/.*|\\?.*)?$")) {
                 continue;
             }
 
